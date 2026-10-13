@@ -12,6 +12,9 @@ const STEP1 = [
 const STEP2 = [
   {key: 'visible_after', title: '知道位置后，在漂移版里能看出漂移吗？', type: 'radio',
    options: [['yes', '能看出'], ['no', '仍然看不出'], ['unsure', '说不准']]},
+  {key: 'area', title: '差异图里在变化的区域，最大时大约占整个画面的多少？',
+   hint: '看漂移最明显的那一刻（往返形态约在中段，单向形态在后段）；只算差异图里明显变亮的部分，不算零星噪点。', type: 'radio',
+   options: [['lt20', '小于 20%'], ['20_40', '20%–40%'], ['40_60', '40%–60%'], ['60_80', '60%–80%'], ['gt80', '大于 80%'], ['unsure', '说不准']]},
   {key: 'match', title: '叠加图标出的区域，和你第一步看到的位置一致吗？', type: 'radio',
    options: [['yes', '一致'], ['partial', '部分一致'], ['no', '不一致'], ['missed', '第一步没看出漂移'], ['unsure', '说不准']]},
   {key: 'coverage', title: '叠加图是否覆盖了差异图里所有在动的部分？', type: 'radio',
@@ -27,7 +30,8 @@ const site = clips[0].id[0], STORE = `calib-v3-labels:${site}`, CURSOR = `calib-
 const rater = () => $('rater').value.trim();
 const mine = () => labels[rater()] || {};
 const isClean = c => !c.comparison;
-const done = c => { const l = mine()[c.id]; return !!l && !!l.step1 && (isClean(c) || !!l.step2); };
+// A clip counts as done only when every current step-2 question is answered (questions may be added later).
+const done = c => { const l = mine()[c.id]; return !!l && !!l.step1 && (isClean(c) || (!!l.step2 && complete(STEP2, l.step2))); };
 
 function needed(q, a) { return !q.when || q.when(a); }
 function complete(qs, a) {
