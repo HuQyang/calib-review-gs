@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>标定集真值检查</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div>
+    <div class="eyebrow">CALIBRATION SET V3 · TRUTH REVIEW</div>
+    <h1>标定集真值检查</h1>
+  </div>
+  <label class="rater">标注者 <input id="rater" placeholder="名字" autocomplete="off"></label>
+  <div class="progress"><span id="progress-text"></span><div class="bar"><div id="bar"></div></div></div>
+</header>
+<main>
+  <nav id="list" aria-label="片段列表"></nav>
+  <section id="stage">
+    <div class="clip-head">
+      <h2 id="clip-title"></h2>
+      <span id="step-badge" class="badge"></span>
+      <span class="speed">播放速度
+        <button data-rate="0.5">0.5×</button><button data-rate="1" class="on">1×</button>
+      </span>
+    </div>
+    <div id="videos" class="videos"></div>
+    <p id="hint" class="hint"></p>
+  </section>
+  <aside id="panel">
+    <form id="form"></form>
+    <p id="status" class="status" role="status"></p>
+  </aside>
+</main>
+<footer>
+  <button id="export">导出全部标签（JSON）</button>
+  <span>标签每次保存都写入服务器上的 labels/labels.json；导出只是备份。</span>
+</footer>
+<script type="module" src="app.js"></script>
+</body>
+</html>
