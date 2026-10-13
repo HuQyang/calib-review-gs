@@ -24,7 +24,7 @@ const STEP2 = [
 ];
 
 const $ = id => document.getElementById(id);
-let labels = {}, cursor = 0, rate = 1, startedAt = Date.now(), server = true;
+let labels = {}, cursor = 0, rate = 1, startedAt = Date.now(), server = true, editing1 = false;
 // Separate browser storage per site (c = local wally site, g = GS, d = 2D), so the two GitHub pages never mix.
 const site = clips[0].id[0], STORE = `calib-v3-labels:${site}`, CURSOR = `calib-v3-cursor:${site}`;
 const rater = () => $('rater').value.trim();
@@ -98,11 +98,20 @@ function render() {
   form.replaceChildren();
   const t1 = document.createElement('div'); t1.className = 'section-title'; t1.textContent = '第一步 · 盲看';
   form.append(t1);
-  const a1 = l.step1 || {};
-  STEP1.forEach(q => form.append(fieldset(q, a1, revealed)));
-  const n1 = document.createElement('textarea'); n1.name = 'note1'; n1.placeholder = '备注（可选）'; n1.value = l.note1 || ''; n1.disabled = revealed;
+  const a1 = l.step1 || {}, locked1 = revealed && !editing1;
+  STEP1.forEach(q => form.append(fieldset(q, a1, locked1)));
+  const n1 = document.createElement('textarea'); n1.name = 'note1'; n1.placeholder = '备注（可选）'; n1.value = l.note1 || ''; n1.disabled = locked1;
   form.append(n1);
-  if (revealed && !isClean(c)) {
+  if (revealed && !editing1) {
+    const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'link';
+    edit.textContent = l.step1_original ? '再次修改第一步' : '修改第一步';
+    edit.onclick = () => {
+      if (!confirm('第一步是盲看判断。你已经看过对照，修改后的答案不再是盲看。\n第一次的答案会原样保留，修改会被记录。确定要修改吗？')) return;
+      editing1 = true; render();
+    };
+    form.append(edit);
+  }
+  if (revealed && !isClean(c) && !editing1) {
     const t2 = document.createElement('div'); t2.className = 'section-title'; t2.textContent = '第二步 · 对照';
     form.append(t2);
     const a2 = l.step2 || {};
@@ -114,11 +123,11 @@ function render() {
   const prev = document.createElement('button'); prev.type = 'button'; prev.className = 'secondary'; prev.textContent = '上一段';
   prev.onclick = () => go(cursor - 1);
   const save = document.createElement('button'); save.type = 'submit';
-  save.textContent = !revealed ? '保存并查看对照' : isClean(c) ? '下一段' : '保存并下一段';
+  save.textContent = editing1 ? '保存第一步的修改' : !revealed ? '保存并查看对照' : isClean(c) ? '下一段' : '保存并下一段';
   act.append(prev, save);
   form.append(act);
   form.onchange = e => {
-    if (revealed) return;
+    if (locked1) return;
     const ex = STEP1.find(q => q.exclusive);
     if (e.target.name === ex.key && e.target.checked) {
       // "none" excludes the other choices: keep whichever was just ticked.
@@ -139,7 +148,7 @@ async function post(clip, label) {
                                          body: JSON.stringify({rater: rater(), clip, label})});
     if (!r.ok) throw new Error(await r.text());
   }
-  label.saved_at ||= new Date().toISOString();
+  label.saved_at = new Date().toISOString();
   (labels[rater()] ||= {})[clip] = label;
   if (!server) localStorage.setItem(STORE, JSON.stringify(labels));
 }
@@ -149,6 +158,17 @@ async function submit() {
   if (!rater()) { $('status').textContent = '请先在顶部填写标注者名字。'; $('rater').focus(); return; }
   const secs = Math.round((Date.now() - startedAt) / 1000);
   try {
+    if (editing1) {
+      const a = read(STEP1, form);
+      if (!needed(STEP1[1], a)) a.where = [];
+      if (!complete(STEP1, a)) { $('status').textContent = '第一步还有题没答。'; return; }
+      // Keep the first (blind) answers; record that step 1 was changed after the comparison was shown.
+      await post(c.id, {...l, step1_original: l.step1_original || l.step1, note1_original: l.note1_original ?? l.note1,
+                        step1: a, note1: form.note1.value, step1_edit_count: (l.step1_edit_count || 0) + 1,
+                        step1_edited_at: new Date().toISOString()});
+      editing1 = false;
+      return render();
+    }
     if (!l.step1) {
       const a = read(STEP1, form);
       if (!needed(STEP1[1], a)) a.where = [];
@@ -166,7 +186,7 @@ async function submit() {
   }
 }
 
-function go(i) { cursor = Math.max(0, Math.min(clips.length - 1, i)); localStorage.setItem(CURSOR, cursor); render(); }
+function go(i) { editing1 = false; cursor = Math.max(0, Math.min(clips.length - 1, i)); localStorage.setItem(CURSOR, cursor); render(); }
 
 function renderList() {
   const n = clips.filter(done).length;
