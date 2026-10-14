@@ -52,3 +52,5 @@ footer button.quiet{border-color:var(--line);color:var(--muted)}
 footer{padding:0 20px 20px;color:var(--muted);font-size:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .section-title{font-size:12px;letter-spacing:.06em;color:var(--muted);margin:4px 0 8px;border-top:1px solid var(--line);padding-top:10px}
 @media (max-width:1200px){main{grid-template-columns:1fr}nav{flex-direction:row;flex-wrap:wrap;max-height:none}.panels.three{grid-template-columns:1fr}}
+.area-info{margin:0 0 14px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.area-info .link{margin:4px 0 0}

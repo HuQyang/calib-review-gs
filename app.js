@@ -1,40 +1,57 @@
-import {clips} from './clips.js';
+import {clips, layout} from './clips.js';
 
-// Layout v2 (2026-10-13). Step 1: drifted video only (the most important item: real detection has no original).
-// Step 2 (opens after step 1 is saved and locked): original | drifted | difference in sync, from one comparison file.
+// Step 1: drifted video only (real detection has no original). Step 2 opens after step 1 is saved and locked:
+// original | drifted | difference in sync, cropped from one comparison file.
 // "Too fast to judge" is its own answer and never counts as "not visible".
+// Layouts: v2 (2026-10-13) five items; v3 (2026-10-14) two items, drift area computed by angle and only shown.
 const FPS = 30;
 const TOO_FAST = ['too_fast', '未判断（太快）'];
 const VIS = [['none', '看不出'], ['subtle', '仔细看才看出'], ['obvious', '明显'], TOO_FAST];
-const STEP1 = [
-  {key: 'blind', title: '只看漂移视频、不对照原视频，能看出异常吗？', type: 'radio', options: VIS,
-   hint: '这一项最重要：真实场景里检测时没有原视频可对照。太快没法判断就选"未判断"，不要选"看不出"。'},
-];
-const STEP2 = [
-  {key: 'compare', title: '对照原视频，能看出漂移吗？', type: 'radio', options: VIS},
-  {key: 'diff', title: '差异强弱（看右边的差异画面，所有片段同一标尺 ×4）', type: 'radio',
-   options: [['none', '无'], ['weak', '弱（只在物体边缘）'], ['strong', '强（成片）'], TOO_FAST]},
-  {key: 'defects', title: '瑕疵（可多选）', type: 'check', exclusive: 'none',
-   options: [['none', '没有'], ['hole', '空洞'], ['seam', '接缝'], ['tear', '撕裂'], ['flicker', '闪烁'], ['jump', '画面跳变'], ['other', '其他（写在备注）']]},
-  {key: 'area', title: '面积：和算好的占比一致吗？', type: 'radio', area: true,
-   options: [['agree', '相符'], ['disagree', '不符（在下面写一句）']]},
-  {key: 'example', title: '可选：典型例子', type: 'radio', optional: true,
-   hint: '"好漂移"和"不合格"各挑 3–5 个就够。选了就写一句原因，并点播放器上的"截图"保存当前帧。',
-   options: [['', '不选'], ['good', '好漂移'], ['bad', '不合格']]},
-];
+const LAYOUTS = {
+  v2: {
+    step1: [{key: 'blind', title: '只看漂移视频、不对照原视频，能看出异常吗？', type: 'radio', options: VIS,
+             hint: '这一项最重要：真实场景里检测时没有原视频可对照。太快没法判断就选"未判断"，不要选"看不出"。'}],
+    step2: [
+      {key: 'compare', title: '对照原视频，能看出漂移吗？', type: 'radio', options: VIS},
+      {key: 'diff', title: '差异强弱（看右边的差异画面，所有片段同一标尺 ×4）', type: 'radio',
+       options: [['none', '无'], ['weak', '弱（只在物体边缘）'], ['strong', '强（成片）'], TOO_FAST]},
+      {key: 'defects', title: '瑕疵（可多选）', type: 'check', exclusive: 'none',
+       options: [['none', '没有'], ['hole', '空洞'], ['seam', '接缝'], ['tear', '撕裂'], ['flicker', '闪烁'], ['jump', '画面跳变'], ['other', '其他（写在备注）']]},
+      {key: 'area', title: '面积：和算好的占比一致吗？', type: 'radio', area: true,
+       note: 'area_note', noteWhen: v => v === 'disagree', notePlaceholder: '面积不符时写一句（例如：肉眼看大约一半都在动）',
+       options: [['agree', '相符'], ['disagree', '不符（在下面写一句）']]},
+      {key: 'example', title: '可选：典型例子', type: 'radio', optional: true,
+       note: 'example_reason', noteWhen: v => !!v, notePlaceholder: '选了典型例子时写一句原因',
+       hint: '"好漂移"和"不合格"各挑 3–5 个就够。选了就写一句原因，并点播放器上的"截图"保存当前帧。',
+       options: [['', '不选'], ['good', '好漂移'], ['bad', '不合格']]},
+    ],
+  },
+  v3: {
+    step1: [{key: 'visible', title: '只看漂移视频，肉眼能看出漂移吗？', type: 'radio',
+             options: [['none', '看不出'], ['subtle', '仔细看能看出'], ['obvious', '一眼能看出'], TOO_FAST],
+             hint: '不对照原视频判断。看得太快没法判断就选"未判断"，不要选"看不出"。'}],
+    step2: [{key: 'natural', title: '看起来自不自然？', type: 'radio',
+             note: 'natural_note', noteWhen: v => v === 'implausible',
+             notePlaceholder: '是什么问题？例如撕裂、拉伸、接缝、闪烁（选"明显不合理"时必填，"有点怪"也建议写）',
+             options: [['natural', '自然'], ['odd', '有点怪'], ['implausible', '明显不合理（写一句是什么问题）']]}],
+  },
+};
+const {step1: STEP1, step2: STEP2} = LAYOUTS[layout];
 
 const $ = id => document.getElementById(id);
 let labels = {}, cursor = 0, rate = 1, startedAt = Date.now(), server = true, editing1 = false, player = null;
-const site = clips[0].id[0], STORE = `calib-v3-labels-v2:${site}`, CURSOR = `calib-v3-cursor:${site}`;
-const OLD_STORE = `calib-v3-labels:${site}`;
+const site = clips[0].id[0], STORE = `calib-v3-labels-${layout}:${site}`, CURSOR = `calib-v3-cursor:${site}`;
+// earlier layouts of this site, kept in their own slots and exportable from the footer
+const OLD_STORES = {v1: `calib-v3-labels:${site}`, v2: `calib-v3-labels-v2:${site}`};
+delete OLD_STORES[layout];
 const rater = () => $('rater').value.trim();
 const mine = () => labels[rater()] || {};
 const isClean = c => !c.comparison;
 
 function complete(qs, a, notes = {}) {
   return qs.every(q => {
-    if (q.optional) return !a[q.key] || !!(notes.example_reason || '').trim();
-    if (q.area && a[q.key] === 'disagree' && !(notes.area_note || '').trim()) return false;
+    if (q.note && q.noteWhen(a[q.key]) && !(notes[q.note] || '').trim()) return false;
+    if (q.optional) return true;
     return q.type === 'radio' ? !!a[q.key] : Array.isArray(a[q.key]) && a[q.key].length > 0;
   });
 }
@@ -165,10 +182,20 @@ function render() {
     const t2 = document.createElement('div'); t2.className = 'section-title'; t2.textContent = '第二步 · 三联对照';
     form.append(t2);
     const a2 = l.step2 || {};
+    if (c.drift_area != null) {
+      const info = document.createElement('div'), v = document.createElement('span'), d = document.createElement('small');
+      const jump = document.createElement('button');
+      info.className = 'area-info'; v.className = 'area-value';
+      v.textContent = `漂移面积 ${(100 * c.drift_area).toFixed(1)}%`;
+      d.textContent = '画面中挪动 ≥0.6° 的像素占整帧的比例，取各帧最大值';
+      jump.type = 'button'; jump.className = 'link'; jump.textContent = `跳到这一帧（第 ${c.drift_frame + 1} 帧）`;
+      jump.onclick = () => player?.seek(c.drift_frame);
+      info.append(v, document.createElement('br'), d, document.createElement('br'), jump);
+      form.append(info);
+    }
     for (const q of STEP2) {
       form.append(fieldset(q, a2, false, c));
-      if (q.area) form.append(textarea('area_note', '面积不符时写一句（例如：肉眼看大约一半都在动）', l.area_note));
-      if (q.optional) form.append(textarea('example_reason', '选了典型例子时写一句原因', l.example_reason));
+      if (q.note) form.append(textarea(q.note, q.notePlaceholder, l[q.note]));
     }
     form.append(textarea('note2', '其他备注（可选）', l.note2));
   }
@@ -191,7 +218,7 @@ function render() {
 }
 
 async function post(clip, label) {
-  label.layout = 'v2';
+  label.layout = layout;
   if (server) {
     const r = await fetch('/api/label', {method: 'POST', headers: {'Content-Type': 'application/json'},
                                          body: JSON.stringify({rater: rater(), clip, label})});
@@ -222,11 +249,12 @@ async function submit() {
     }
     if (isClean(c)) return go(cursor + 1);
     const a = read(STEP2, form);
-    const notes = {area_note: form.area_note.value, example_reason: form.example_reason.value};
-    if (a.area === 'disagree' && !notes.area_note.trim()) { $('status').textContent = '面积选了"不符"，请写一句。'; return; }
-    if (a.example && !notes.example_reason.trim()) { $('status').textContent = '选了典型例子，请写一句原因。'; return; }
+    const notes = Object.fromEntries(STEP2.filter(q => q.note).map(q => [q.note, form[q.note].value]));
+    const missingNote = STEP2.find(q => q.note && q.noteWhen(a[q.key]) && !notes[q.note].trim());
+    if (missingNote) { $('status').textContent = `「${missingNote.title}」这一题需要写一句说明。`; return; }
     if (!complete(STEP2, a, notes)) { $('status').textContent = '第二步还有题没答。'; return; }
-    await post(c.id, {...l, step2: a, ...notes, note2: form.note2.value, step2_seconds: secs, area_shown: c.area});
+    await post(c.id, {...l, step2: a, ...notes, note2: form.note2.value, step2_seconds: secs,
+                      area_shown: layout === 'v3' ? c.drift_area : c.area});
     go(cursor + 1);
   } catch (err) {
     $('status').textContent = '保存失败：' + err.message;
@@ -272,12 +300,15 @@ const download = (obj, name) => {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(obj, null, 1)], {type: 'application/json'})); a.download = name; a.click();
 };
-$('export').onclick = () => download({rater: rater(), layout: 'v2', site, exported_at: new Date().toISOString(), labels: mine()},
-                                      `calib_v3_${site}_labels_v2_${rater() || 'unnamed'}.json`);
+$('export').onclick = () => download({rater: rater(), layout, site, exported_at: new Date().toISOString(), labels: mine()},
+                                      `calib_v3_${site}_labels_${layout}_${rater() || 'unnamed'}.json`);
 $('export-old').onclick = () => {
-  let old = null; try { old = JSON.parse(localStorage.getItem(OLD_STORE)); } catch {}
-  if (!old) { $('status').textContent = '这个浏览器里没有旧版标签。'; return; }
-  download({layout: 'v1', site, exported_at: new Date().toISOString(), labels: old}, `calib_v3_${site}_labels_v1_old.json`);
+  let n = 0;
+  for (const [ver, key] of Object.entries(OLD_STORES)) {
+    let old = null; try { old = JSON.parse(localStorage.getItem(key)); } catch {}
+    if (old && Object.keys(old).length) { n++; download({layout: ver, site, exported_at: new Date().toISOString(), labels: old}, `calib_v3_${site}_labels_${ver}_old.json`); }
+  }
+  if (!n) $('status').textContent = '这个浏览器里没有旧版标签。';
 };
 const firstOpen = () => { const i = clips.findIndex(c => !done(c)); return i < 0 ? 0 : i; };
 
@@ -285,8 +316,8 @@ try {
   const r = await fetch('/api/labels');
   if (!r.ok || !(r.headers.get('Content-Type') || '').includes('json')) throw new Error();
   const all = await r.json();
-  // the server keeps every layout; only v2 records count here
-  labels = Object.fromEntries(Object.entries(all).map(([k, v]) => [k, Object.fromEntries(Object.entries(v).filter(([, x]) => x.layout === 'v2'))]));
+  // the server keeps every layout; only records of this layout count here
+  labels = Object.fromEntries(Object.entries(all).map(([k, v]) => [k, Object.fromEntries(Object.entries(v).filter(([, x]) => x.layout === layout))]));
 } catch {
   server = false;
   try { labels = JSON.parse(localStorage.getItem(STORE)) || {}; } catch { labels = {}; }
