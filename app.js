@@ -138,7 +138,7 @@ function render() {
   if (!locked1 || isClean(c)) {
     player = makePlayer(c.video, [[isClean(c) && locked1 ? '待检查视频（本段是干净对照，没有注入漂移）' : '漂移视频', 0]]);
     $('panels').className = 'panels one';
-    $('hint').textContent = !locked1 ? '只看这一段判断。可用 0.25× / 0.5× 慢放，或用 ← → 逐帧翻看。' :
+    $('hint').textContent = !locked1 ? '只看这一段判断。可用 0.1× / 0.25× / 0.5× 慢放，或用 ← → 逐帧翻看。' :
       '这是混入的干净对照，用来估计误报率，没有第二步。';
   } else {
     player = makePlayer(c.comparison, [['原视频', 1], ['漂移视频', 0], ['差异 ×4', 2]]);
